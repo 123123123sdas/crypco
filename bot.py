@@ -8,7 +8,7 @@ from telegram.ext import Updater, CommandHandler, CallbackContext
 TELEGRAM_TOKEN = '7613669504:AAFRpkXmuL2eQw0zROvaXEz_M2mcFOZJkug'
 NOWPAYMENTS_API_KEY = '76WKCA2-4K24612-PPXE9Z3-MD82EDD'
 NOWPAYMENTS_API_URL = 'https://api.nowpayments.io/v1/invoice'
-BOT_OWNER_CHAT_ID = твой_телега_id  # чтобы уведомлять себя
+BOT_OWNER_CHAT_ID = 7169536049  # чтобы уведомлять себя
 
 app = Flask(__name__)
 bot = Bot(token=TELEGRAM_TOKEN)
