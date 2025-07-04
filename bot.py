@@ -9,78 +9,65 @@ TELEGRAM_TOKEN = '7613669504:AAFRpkXmuL2eQw0zROvaXEz_M2mcFOZJkug'
 NOWPAYMENTS_API_KEY = '76WKCA2-4K24612-PPXE9Z3-MD82EDD'
 NOWPAYMENTS_API_URL = 'https://api.nowpayments.io/v1/invoice'
 BOT_OWNER_CHAT_ID = 7169536049  # чтобы уведомлять себя
+import os
+import logging
+from aiogram import Bot, Dispatcher, executor, types
+import requests
 
-app = Flask(__name__)
-bot = Bot(token=TELEGRAM_TOKEN)
+logging.basicConfig(level=logging.INFO)
 
-# Словарь для хранения заказов (можно заменить на базу)
-orders = {}
+TOKEN = os.getenv("7613669504:AAFRpkXmuL2eQw0zROvaXEz_M2mcFOZJkug")
+NEWPAYMENTS_API_KEY = os.getenv("76WKCA2-4K24612-PPXE9Z3-MD82EDD")
+NEWPAYMENTS_DOMAIN = os.getenv("https://t.me/+JnNOOw0o8WQwYjUy")  # например, "yourdomain.com" или ссылка на канал
 
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text("Привет! Чтобы купить крипто-прогноз, отправь /buy")
+bot = Bot(token=TOKEN)
+dp = Dispatcher(bot)
 
-def buy(update: Update, context: CallbackContext):
-    chat_id = update.message.chat_id
-    price_usd = 10  # цена прогноза в USD
-    currency = 'usd'
-    
-    # Создаём платёж
+PRODUCT_PRICE = 10  # USD
+PRODUCT_DESC = "Эксклюзивный прогноз по крипте на неделю"
+
+@dp.message_handler(commands=['start'])
+async def cmd_start(message: types.Message):
+    keyboard = types.InlineKeyboardMarkup()
+    btn = types.InlineKeyboardButton(text=f"Купить прогноз за ${PRODUCT_PRICE}", callback_data='buy')
+    keyboard.add(btn)
+    await message.answer("Привет! Хочешь купить прогноз по крипте?", reply_markup=keyboard)
+
+@dp.callback_query_handler(lambda c: c.data == 'buy')
+async def process_buy(callback_query: types.CallbackQuery):
+    chat_id = callback_query.from_user.id
+
+    payment_data = {
+        "amount": PRODUCT_PRICE,
+        "currency": "USD",
+        "description": PRODUCT_DESC,
+        "order_id": f"order_{chat_id}_{callback_query.message.message_id}",
+        "success_url": f"https://{NEWPAYMENTS_DOMAIN}/success",
+        "cancel_url": f"https://{NEWPAYMENTS_DOMAIN}/cancel"
+    }
+
     headers = {
-        'x-api-key': NOWPAYMENTS_API_KEY,
-        'Content-Type': 'application/json',
+        "Authorization": f"Bearer {NEWPAYMENTS_API_KEY}",
+        "Content-Type": "application/json"
     }
-    data = {
-        "price_amount": price_usd,
-        "price_currency": currency,
-        "pay_currency": "btc",  # или любая другая крипта
-        "ipn_callback_url": "https://твой_домен/nowpayments_callback",
-        "order_id": str(chat_id),
-        "order_description": "Крипто-прогноз",
-    }
-    response = requests.post(NOWPAYMENTS_API_URL, json=data, headers=headers)
+
+    response = requests.post("https://api.newpayments.io/v1/payments", json=payment_data, headers=headers)
+
     if response.status_code == 200:
-        result = response.json()
-        payment_url = result['invoice_url']
-        invoice_id = result['id']
-        
-        # Сохраняем заказ
-        orders[invoice_id] = chat_id
-        
-        update.message.reply_text(f"Плати по ссылке:\n{payment_url}")
+        pay_url = response.json().get("payment_url")
+        if pay_url:
+            await bot.send_message(chat_id, f"Перейди по ссылке и оплати прогноз:\n{pay_url}")
+        else:
+            await bot.send_message(chat_id, "Ошибка: ссылка на оплату не получена.")
     else:
-        update.message.reply_text("Ошибка создания платежа. Попробуй позже.")
+        await bot.send_message(chat_id, "Ошибка при создании платежа, попробуйте позже.")
 
-# Вебхук для уведомлений от NOWPayments
-@app.route('/nowpayments_callback', methods=['POST'])
-def nowpayments_callback():
-    data = request.json
-    invoice_id = data.get('invoice_id')
-    payment_status = data.get('payment_status')
-    
-    if payment_status == 'finished' and invoice_id in orders:
-        chat_id = orders[invoice_id]
-        # Отправляем прогноз пользователю
-        bot.send_message(chat_id=chat_id, text="Оплата получена! Вот твой крипто-прогноз: ...")
-        
-        # Можно удалить заказ
-        del orders[invoice_id]
-    return jsonify({'status': 'ok'})
+    await bot.answer_callback_query(callback_query.id)
 
-def main():
-    updater = Updater(TELEGRAM_TOKEN)
-    dp = updater.dispatcher
-    
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("buy", buy))
-    
-    updater.start_polling()
-    print("Бот запущен")
-    updater.idle()
+@dp.message_handler(commands=['help'])
+async def cmd_help(message: types.Message):
+    await message.answer("Команды:\n/start - начать\n/help - помощь")
 
-if __name__ == "__main__":
-    from threading import Thread
-    # Запускаем Flask в отдельном потоке
-    Thread(target=lambda: app.run(host="0.0.0.0", port=5000)).start()
-    
-    # Запускаем Telegram бота
-    main()
+if __name__ == '__main__':
+    executor.start_polling(dp)
+
