@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+load_dotenv()
+# остальные импорты...
 import requests
 from flask import Flask, request, jsonify
 from telegram import Update, Bot
